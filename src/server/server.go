@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jnsoft/jngo/pqueue"
 	"github.com/jnsoft/jnq/src/mempqueue"
-	"github.com/jnsoft/jnq/src/pqueue"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jnsoft/jngo/pqueue"
 	"github.com/jnsoft/jnq/src/mempqueue"
-	"github.com/jnsoft/jnq/src/pqueue"
 	_ "github.com/mattn/go-sqlite3"
 )
 

@@ -167,6 +167,44 @@ func TestJnqEndToEnd(t *testing.T) {
 		AssertNoError(t, err)
 	})
 
+	t.Run("Performance test", func(t *testing.T) {
+		const NO_OF_ITEMS = 1000
+		const MAX_PARALLELISM = 100
+		const VERBOSE = false
+
+		tempFile, err := getTempFile()
+		AssertNoError(t, err)
+		defer os.Remove(tempFile.Name())
+
+		//pq := sqlpqueue.NewSqLitePQueue(tempFile.Name(), "test", VERBOSE)
+		pq := mempqueue.NewMemPQueue(true)
+
+		srv := server.NewServer(pq, API_KEY, VERBOSE)
+		ready := make(chan struct{})
+		go func() {
+			err := srv.Start(":"+strconv.Itoa(PORT+1), ready)
+			if err != nil && err != http.ErrServerClosed {
+				fmt.Printf("Failed to start server: %v\n", err)
+			}
+		}()
+
+		<-ready
+		time.Sleep(1 * time.Second)
+
+		startTime := time.Now()
+		enqueueURL := fmt.Sprintf("%s:%d%s", API_BASE_URL, PORT+1, ENQUEUE_ENDPOINT)
+		dequeueURL := fmt.Sprintf("%s:%d%s", API_BASE_URL, PORT+1, DEQUEUE_ENDPOINT)
+
+		runQueueOperations(NO_OF_ITEMS, enqueueURL, dequeueURL, API_KEY, true)
+
+		duration := time.Since(startTime)
+		t.Logf("Performance test completed: %d items processed in %v", NO_OF_ITEMS, duration)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		err = srv.Shutdown(ctx)
+		AssertNoError(t, err)
+	})
 }
 
 func getItem(itemId int) string {
@@ -192,6 +230,38 @@ func getTempFile() (*os.File, error) {
 		return nil, err
 	}
 	return tempFile, nil
+}
+
+func runQueueOperations(noOfItems int, enqueueURL, dequeueURL, apiKey string, parallel bool) {
+	// Enqueue items
+	for i := 0; i < noOfItems; i++ {
+		item := getItem(i)
+		_, code, err := httphelper.PostString(
+			fmt.Sprintf("%s?prio=0.1&channel=1&notbefore=%s", enqueueURL, time.Now().Format(time.RFC3339)),
+			item,
+			[2]string{server.API_KEY_HEADER, apiKey},
+		)
+		if err != nil || code != http.StatusOK {
+			panic(fmt.Sprintf("Failed to enqueue item %d: %v (HTTP %d)", i, err, code))
+		}
+		if i%100 == 0 {
+			fmt.Printf("Enqueued %d items\n", i)
+		}
+	}
+
+	// Dequeue items
+	for i := 0; i < noOfItems; i++ {
+		_, code, err := httphelper.GetString(
+			fmt.Sprintf("%s?channel=1", dequeueURL),
+			[2]string{server.API_KEY_HEADER, apiKey},
+		)
+		if err != nil || code != http.StatusOK {
+			panic(fmt.Sprintf("Failed to dequeue item %d: %v (HTTP %d)", i, err, code))
+		}
+		if i%100 == 0 {
+			fmt.Printf("Dequeued %d items\n", i)
+		}
+	}
 }
 
 /*
