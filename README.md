@@ -1,5 +1,11 @@
 # Introduction 
 
+TODO:  
+tests for DequeueWithReservation, ConfirmReservation and RequeueExpiredReservations  
+tests for /dequeuesafe and /confirm and StartRequeueTask in Server
+update swagger for /dequeuesafe and /confirm
+
+
 # Init
 ```
 git config --global user.name "Your Name"
