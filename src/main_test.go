@@ -282,28 +282,3 @@ func getTempFile() (*os.File, error) {
 	}
 	return tempFile, nil
 }
-
-/*
-
-t.Run("End to end test DB", func(t *testing.T) {
-		pq := sqlpqueue.NewSqLitePQueue("test.db", "test", true)
-		srv := server.NewServer(pq, "", false)
-		go func() {
-			if err := srv.Start(":" + strconv.Itoa(8080)); err != nil {
-				fmt.Printf("Failed to start server: %v\n", err)
-			}
-		}()
-
-		time.Sleep(3 * time.Second)
-		enqueueItems(NO_OF_ITEMS, "http://localhost:8080/enqueue", server.API_KEY)
-		dequeueItems("http://localhost:8080/dequeue", server.API_KEY, server.API_KEY_HEADER, false)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		err := srv.Shutdown(ctx)
-		AssertNoError(t, err)
-
-	})
-
-
-*/
