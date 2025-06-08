@@ -66,6 +66,29 @@ func (wc *WorkerClient) StartReader(wg *sync.WaitGroup) {
 }
 */
 
+func (wc *WorkerClient) getQueueSize(channel int) (int, error) {
+	headers := [][2]string{
+		{"X-API-Key", wc.APIKey},
+	}
+
+	url := fmt.Sprintf("%s/size?channel=%d", wc.ServerURL, channel)
+	response, code, err := httphelper.GetJSON[map[string]int](url, headers...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query queue size: %w", err)
+	}
+
+	if code != http.StatusOK {
+		return 0, fmt.Errorf("unexpected response status: %d", code)
+	}
+
+	size, ok := response["size"]
+	if !ok {
+		return 0, fmt.Errorf("invalid response format: missing 'size' field")
+	}
+
+	return size, nil
+}
+
 func (wc *WorkerClient) postToQueue() error {
 	qId := randx.Int(1, 10000) // Random channel ID for demonstration
 	item := fmt.Sprintf(`{"value": "Worker item %d at %s"}`, qId, time.Now().Format(time.RFC3339))
@@ -83,12 +106,14 @@ func (wc *WorkerClient) postToQueue() error {
 		return fmt.Errorf("unexpected response status: %d", code)
 	}
 
-	mu.Lock()
-	enqueuedCount++
-	fmt.Printf("Enqueued item. Total enqueued: %d\n", enqueuedCount)
-	mu.Unlock()
+	size, err := wc.getQueueSize(1) // Assuming channel 1
+	if err != nil {
+		return fmt.Errorf("failed to get queue size: %w", err)
+	}
+	fmt.Printf("Enqueued item. Current queue size: %d\n", size)
 
 	return nil
+
 }
 
 func (wc *WorkerClient) readFromQueue() error {
@@ -110,12 +135,12 @@ func (wc *WorkerClient) readFromQueue() error {
 		return fmt.Errorf("unexpected response status: %d", code)
 	}
 
-	mu.Lock()
-	if enqueuedCount > 0 {
-		enqueuedCount--
+	size, err := wc.getQueueSize(1) // Assuming channel 1
+	if err != nil {
+		return fmt.Errorf("failed to get queue size: %w", err)
 	}
-	fmt.Printf("Dequeued item: %s. Total dequeued: %d\n", value, enqueuedCount)
-	mu.Unlock()
+	fmt.Printf("Dequeued item: %s. Current queue size: %d\n", value, size)
+
 	return nil
 }
 
