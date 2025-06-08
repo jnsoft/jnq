@@ -21,14 +21,14 @@ go test -v -race ./src/pqueue/ # identify race conditions
 go test -v ./src/mempqueue
 
 go run src/generateswagger/generateswagger.go
-go build -o .bin/app ./src/main.go
-./.bin/app -db test.db -table QueueItems -n 10
 
-go run ./src/main.go -key api-key -n 3 -db test.db -v
-go run ./src/main.go -db test.db -table QueueItems -n 10
+go build -o .bin/app ./src/main.go
+
+go run ./src/main.go -key api-key -db test.db -v
+go run ./src/main.go -key api-key -m
+
 
 go build -o ./.bin/client ./workerclient/workerclient.go
-chmod +x ./.bin/client
 ./.bin/client http://localhost:8080 1 api-key 5 5
 ```
 
