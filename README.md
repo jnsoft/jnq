@@ -37,8 +37,10 @@ go build -o ./.bin/client ./workerclient/workerclient.go
 podman build -t jnq .
 
 read -s API_KEY
-
 podman run -d --rm -p 8080:8080 jnq -key $API_KEY
+
+mkdir -p ~/jnq-data
+podman run -d --rm -p 8080:8080 -v ~/jnq-data:/app/data jnq -key $API_KEY -db /app/data/test.db
 
 curl -X 'POST' \
   "http://localhost:8080/reset" \
