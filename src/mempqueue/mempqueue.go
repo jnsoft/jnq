@@ -6,21 +6,13 @@ import (
 	"time"
 
 	"github.com/jnsoft/jngo/pqueue"
+	"github.com/jnsoft/jnq/src/priorityqueue"
 )
 
 const (
 	MAX_CHANNEL         = 100
 	INVALID_CHANNEL_MSG = "invalid channel"
 )
-
-type IPriorityQueue interface {
-	IsEmpty(channel int) (bool, error)
-	Size(channel int) (int, error)
-	Peek(channel int) (string, error)
-	Enqueue(obj string, prio float64, channel int, notBefore time.Time) error
-	Dequeue(channel int) (string, error)
-	ResetQueue() error
-}
 
 type pqItem struct {
 	obj        string
@@ -175,4 +167,4 @@ func (pq *MemPQueue) processNotBeforeQueue() {
 }
 
 // Ensure MemPQueue implements IPriorityQueue
-var _ IPriorityQueue = (*MemPQueue)(nil)
+var _ priorityqueue.IPriorityQueue = (*MemPQueue)(nil)

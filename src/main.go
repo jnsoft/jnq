@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jnsoft/jnq/src/mempqueue"
+	"github.com/jnsoft/jnq/src/priorityqueue"
 	"github.com/jnsoft/jnq/src/server"
 	"github.com/jnsoft/jnq/src/sqlpqueue"
 )
@@ -41,7 +42,7 @@ func main() {
 		log.Fatal("API key is required (use -key or set API_KEY environment variable)")
 	}
 
-	var pq mempqueue.IPriorityQueue
+	var pq priorityqueue.IPriorityQueue
 
 	if mem_queue {
 		log.Println("Using in-memory queue")

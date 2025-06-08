@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jnsoft/jngo/pqueue"
-	"github.com/jnsoft/jnq/src/mempqueue"
+	"github.com/jnsoft/jnq/src/priorityqueue"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -173,4 +173,4 @@ func (pq *SqLitePQueue) initDb() {
 }
 
 // Ensure SqLitePQueue implements IPriorityQueue
-var _ mempqueue.IPriorityQueue = (*SqLitePQueue)(nil)
+var _ priorityqueue.IPriorityQueue = (*SqLitePQueue)(nil)

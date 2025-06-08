@@ -15,6 +15,7 @@ import (
 
 	"github.com/jnsoft/jngo/pqueue"
 	"github.com/jnsoft/jnq/src/mempqueue"
+	"github.com/jnsoft/jnq/src/priorityqueue"
 )
 
 const (
@@ -29,7 +30,7 @@ var swaggerJSON []byte
 
 type (
 	Server struct {
-		pq      mempqueue.IPriorityQueue
+		pq      priorityqueue.IPriorityQueue
 		mu      sync.Mutex
 		api_key string
 		verbose bool
@@ -37,7 +38,7 @@ type (
 	}
 )
 
-func NewServer(pq mempqueue.IPriorityQueue, apikey string, verbose bool) *Server {
+func NewServer(pq priorityqueue.IPriorityQueue, apikey string, verbose bool) *Server {
 	if apikey == "" {
 		apikey = API_KEY
 	}
