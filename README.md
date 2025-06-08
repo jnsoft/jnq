@@ -26,6 +26,10 @@ go build -o .bin/app ./src/main.go
 
 go run ./src/main.go -key api-key -n 3 -db test.db -v
 go run ./src/main.go -db test.db -table QueueItems -n 10
+
+go build -o ./.bin/client ./workerclient/workerclient.go
+chmod +x ./.bin/client
+./.bin/client http://localhost:8080 5 api-key 3 2
 ```
 
 ### Podman build
