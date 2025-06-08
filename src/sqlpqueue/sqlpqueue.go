@@ -70,19 +70,58 @@ func (pq *SqLitePQueue) Dequeue(channel int) (string, error) {
 	}
 	defer db.Close()
 
-	hasItem, id, item, err := pq.peek(channel)
+	tx, err := db.Begin()
 	if err != nil {
 		return "", err
 	}
-	if hasItem {
-		deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE Id = ?", pq.table)
-		_, err = db.Exec(deleteSQL, id)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	order := "ASC"
+	if !pq.isMinQueue {
+		order = "DESC"
+	}
+
+	selectSQL := fmt.Sprintf(selectSQL, pq.table, order)
+	row := tx.QueryRow(selectSQL, channel, time.Now().Unix())
+
+	var id int
+	var obj string
+	err = row.Scan(&id, &obj)
+	if err == sql.ErrNoRows {
+		return "", errors.New(pqueue.EMPTY_QUEUE)
+	} else if err != nil {
+		return "", err
+	}
+
+	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE Id = ?", pq.table)
+	_, err = tx.Exec(deleteSQL, id)
+	if err != nil {
+		return "", err
+	}
+
+	return obj, nil
+
+	/*
+		hasItem, id, item, err := pq.peek(channel)
 		if err != nil {
 			return "", err
 		}
-		return item, nil
-	}
-	return "", errors.New(pqueue.EMPTY_QUEUE)
+		if hasItem {
+			deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE Id = ?", pq.table)
+			_, err = db.Exec(deleteSQL, id)
+			if err != nil {
+				return "", err
+			}
+			return item, nil
+		}
+		return "", errors.New(pqueue.EMPTY_QUEUE)
+	*/
 }
 
 func (pq *SqLitePQueue) DequeueWithReservation(channel int) (string, string, error) {
@@ -92,21 +131,42 @@ func (pq *SqLitePQueue) DequeueWithReservation(channel int) (string, string, err
 	}
 	defer db.Close()
 
-	hasItem, id, item, err := pq.peek(channel)
+	tx, err := db.Begin()
+	if err != nil {
+		return "", "", err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		} else {
+			tx.Commit()
+		}
+	}()
+
+	order := "ASC"
+	if !pq.isMinQueue {
+		order = "DESC"
+	}
+	selectSQL := fmt.Sprintf(selectSQL, pq.table, order)
+	row := tx.QueryRow(selectSQL, channel, time.Now().Unix())
+
+	var id int
+	var obj string
+	err = row.Scan(&id, &obj)
+	if err == sql.ErrNoRows {
+		return "", "", errors.New(pqueue.EMPTY_QUEUE)
+	} else if err != nil {
+		return "", "", err
+	}
+
+	reservationId := uuid.New().String()
+	updateSQL := fmt.Sprintf("UPDATE %s SET Reserved = 1, ReservedId = ? WHERE Id = ?", pq.table)
+	_, err = tx.Exec(updateSQL, reservationId, id)
 	if err != nil {
 		return "", "", err
 	}
 
-	if hasItem {
-		reservationId := uuid.New().String()
-		updateSQL := fmt.Sprintf("UPDATE %s SET Reserved = 1, ReservedId = ? WHERE Reserved = 0 and Id = ?", pq.table)
-		_, err = db.Exec(updateSQL, reservationId, id)
-		if err != nil {
-			return "", "", err
-		}
-		return item, reservationId, nil
-	}
-	return "", "", errors.New(pqueue.EMPTY_QUEUE)
+	return obj, reservationId, nil
 
 }
 
