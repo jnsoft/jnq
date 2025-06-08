@@ -265,6 +265,73 @@
         ],
         "summary": "Reset the queue"
       }
+    },
+    "/size": {
+      "get": {
+        "description": "Returns the number of items in the queue for a specified channel",
+        "method": "get",
+        "parameters": [
+          {
+            "description": "Channel to get the size of",
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "path": "/size",
+        "responses": {
+          "200": {
+            "content": {
+              "map[string]int": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "{object}"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Get the size of the queue"
+      }
     }
   },
   "security": [

@@ -9,8 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jnsoft/jngo/randx"
 	"github.com/jnsoft/jnq/src/httphelper"
 )
+
+var enqueuedCount int64
+var mu sync.Mutex
 
 type WorkerClient struct {
 	ServerURL string
@@ -26,6 +30,7 @@ func NewWorkerClient(serverURL string, interval time.Duration, apiKey string) *W
 	}
 }
 
+/*
 func (wc *WorkerClient) StartPoster(wg *sync.WaitGroup) {
 	defer wg.Done()
 	ticker := time.NewTicker(wc.Interval)
@@ -59,15 +64,17 @@ func (wc *WorkerClient) StartReader(wg *sync.WaitGroup) {
 		}
 	}
 }
+*/
 
 func (wc *WorkerClient) postToQueue() error {
-	item := fmt.Sprintf(`{"value": "Worker item at %s"}`, time.Now().Format(time.RFC3339))
+	qId := randx.Int(1, 10000) // Random channel ID for demonstration
+	item := fmt.Sprintf(`{"value": "Worker item %d at %s"}`, qId, time.Now().Format(time.RFC3339))
 	headers := [][2]string{
 		{"Content-Type", "application/json"},
-		{"Authorization", wc.APIKey},
+		{"X-API-Key", wc.APIKey},
 	}
 
-	_, code, err := httphelper.PostString(wc.ServerURL+"/enqueue", item, headers...)
+	_, code, err := httphelper.PostString(wc.ServerURL+"/enqueue?channel=1", item, headers...)
 	if err != nil {
 		return fmt.Errorf("failed to post to queue: %w", err)
 	}
@@ -76,12 +83,17 @@ func (wc *WorkerClient) postToQueue() error {
 		return fmt.Errorf("unexpected response status: %d", code)
 	}
 
+	mu.Lock()
+	enqueuedCount++
+	fmt.Printf("Enqueued item. Total enqueued: %d\n", enqueuedCount)
+	mu.Unlock()
+
 	return nil
 }
 
 func (wc *WorkerClient) readFromQueue() error {
 	headers := [][2]string{
-		{"Authorization", wc.APIKey},
+		{"X-API-Key", wc.APIKey},
 	}
 
 	value, code, err := httphelper.GetString(wc.ServerURL+"/dequeue?channel=1", headers...)
@@ -98,7 +110,12 @@ func (wc *WorkerClient) readFromQueue() error {
 		return fmt.Errorf("unexpected response status: %d", code)
 	}
 
-	fmt.Printf("Read item from queue: %s\n", value)
+	mu.Lock()
+	if enqueuedCount > 0 {
+		enqueuedCount--
+	}
+	fmt.Printf("Dequeued item: %s. Total dequeued: %d\n", value, enqueuedCount)
+	mu.Unlock()
 	return nil
 }
 
@@ -115,6 +132,8 @@ func main() {
 		os.Exit(1)
 	}
 	apiKey := os.Args[3]
+	fmt.Println("Using API Key:", apiKey)
+
 	numPosters, err := strconv.Atoi(os.Args[4])
 	if err != nil || numPosters < 0 {
 		fmt.Println("Invalid number of posters. Please provide a non-negative integer.")
@@ -143,7 +162,8 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ticker := time.NewTicker(worker.Interval)
+			randomDelay := time.Duration(randx.Int(0, 250)) * time.Millisecond
+			ticker := time.NewTicker(worker.Interval + randomDelay)
 			defer ticker.Stop()
 
 			for {
@@ -156,7 +176,7 @@ func main() {
 					if err != nil {
 						fmt.Printf("Error posting to queue: %v\n", err)
 					} else {
-						fmt.Println("Successfully posted to queue.")
+						//fmt.Println("Successfully posted to queue.")
 					}
 				}
 			}
@@ -172,7 +192,8 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ticker := time.NewTicker(worker.Interval)
+			randomDelay := time.Duration(randx.Int(0, 250)) * time.Millisecond
+			ticker := time.NewTicker(worker.Interval + randomDelay)
 			defer ticker.Stop()
 
 			for {
@@ -185,7 +206,7 @@ func main() {
 					if err != nil {
 						fmt.Printf("Error reading from queue: %v\n", err)
 					} else {
-						fmt.Println("Successfully read from queue.")
+						//fmt.Println("Successfully read from queue.")
 					}
 				}
 			}

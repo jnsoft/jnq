@@ -29,7 +29,7 @@ go run ./src/main.go -db test.db -table QueueItems -n 10
 
 go build -o ./.bin/client ./workerclient/workerclient.go
 chmod +x ./.bin/client
-./.bin/client http://localhost:8080 5 api-key 3 2
+./.bin/client http://localhost:8080 1 api-key 5 5
 ```
 
 ### Podman build
