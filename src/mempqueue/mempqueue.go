@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jnsoft/jngo/pqueue"
 	"github.com/jnsoft/jnq/src/priorityqueue"
 )
@@ -25,9 +26,16 @@ type notBeforeItem struct {
 	channel int
 }
 
+type reservedItem struct {
+	item      pqItem
+	channel   int
+	timestamp time.Time // Time when the item was reserved
+}
+
 type MemPQueue struct {
 	pqs           []pqueue.PriorityQueue[pqItem]
 	not_before_pq pqueue.PriorityQueue[notBeforeItem]
+	reserved      map[string]reservedItem
 	isMinQueue    bool
 	mu            sync.Mutex
 }
@@ -48,6 +56,7 @@ func NewMemPQueue(IsMinQueue bool) *MemPQueue {
 	return &MemPQueue{
 		pqs:           pqs,
 		not_before_pq: *pqueue.NewPriorityQueue(less_not_before),
+		reserved:      make(map[string]reservedItem),
 		isMinQueue:    IsMinQueue,
 	}
 }
@@ -125,6 +134,56 @@ func (pq *MemPQueue) Dequeue(channel int) (string, error) {
 		return "", err
 	}
 	return item.obj, nil
+}
+
+func (pq *MemPQueue) DequeueWithReservation(channel int) (string, string, error) {
+	if channel < 0 || channel >= MAX_CHANNEL {
+		return "", "", errors.New(INVALID_CHANNEL_MSG)
+	}
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	pq.processNotBeforeQueue()
+
+	item, err := pq.pqs[channel].Dequeue()
+	if err != nil {
+		return "", "", err
+	}
+
+	reservationId := uuid.New().String()
+	pq.reserved[reservationId] = reservedItem{
+		item:      item,
+		channel:   channel,
+		timestamp: time.Now(),
+	}
+
+	return item.obj, reservationId, nil
+}
+
+func (pq *MemPQueue) ConfirmReservation(reservationId string) (bool, error) {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	_, exists := pq.reserved[reservationId]
+	if !exists {
+		return false, errors.New("invalid or expired reservation ID")
+	}
+
+	delete(pq.reserved, reservationId)
+	return true, nil
+}
+
+func (pq *MemPQueue) RequeueExpiredReservations(timeout time.Duration) {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	now := time.Now()
+	for reservationID, reserved := range pq.reserved {
+		if now.Sub(reserved.timestamp) > timeout {
+			pq.pqs[reserved.channel].Enqueue(reserved.item)
+			delete(pq.reserved, reservationID)
+		}
+	}
 }
 
 func (pq *MemPQueue) ResetQueue() error {

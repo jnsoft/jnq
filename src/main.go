@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	MAX_PARALLELISM = 10
+	MAX_PARALLELISM             = 10
+	RESERVATION_TIMEOUT_SECONDS = 30
 )
 
 func main() {
@@ -58,6 +59,10 @@ func main() {
 	// Set up server
 	log.Printf("Starting server on port %d\n", *port)
 	srv := server.NewServer(pq, *apiKey, *verbose)
+
+	reservationTimeout := RESERVATION_TIMEOUT_SECONDS * time.Second
+	srv.StartRequeueTask(reservationTimeout)
+
 	ready := make(chan struct{})
 	go func() {
 		err := srv.Start(":"+strconv.Itoa(*port), ready)

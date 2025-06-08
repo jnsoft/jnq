@@ -8,6 +8,8 @@ go mod init github.com/jnsoft/jnq
 
 go get -u github.com/go-chi/chi/v5
 go get -u github.com/go-openapi/runtime/middleware
+go get -u github.com/google/uuid
+go get -u github.com/jnsoft/jngo
 
 # debug:
 dlv debug src/main.go
@@ -69,6 +71,13 @@ curl -X 'GET' \
   "http://localhost:8080/dequeue?channel=2" \
   -H "accept: application/json" \
   -H "X-API-Key: $API_KEY"
+
+curl -X GET "http://localhost:8080/dequeuesafe?channel=1" -H "X-API-Key: api-key"
+
+curl -X POST "http://localhost:8080/confirm" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: api-key" \
+  -d '{"reservation_id": "1-1696857600000000"}'
 ```
 
 ```
