@@ -5,12 +5,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jnsoft/jnq/src/pqueue"
+	"github.com/jnsoft/jngo/pqueue"
 )
 
 const (
 	MAX_CHANNEL         = 100
-	INVALID_CHANNEL_MSG = "Invalid channel"
+	INVALID_CHANNEL_MSG = "invalid channel"
 )
 
 type IPriorityQueue interface {
@@ -51,11 +51,11 @@ func less_not_before(i, j notBeforeItem) bool {
 func NewMemPQueue(IsMinQueue bool) *MemPQueue {
 	pqs := make([]pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
 	for i := 0; i < MAX_CHANNEL; i++ {
-		pqs[i] = *pqueue.NewPriorityQueue[pqItem](less)
+		pqs[i] = *pqueue.NewPriorityQueue(less)
 	}
 	return &MemPQueue{
 		pqs:           pqs,
-		not_before_pq: *pqueue.NewPriorityQueue[notBeforeItem](less_not_before),
+		not_before_pq: *pqueue.NewPriorityQueue(less_not_before),
 		isMinQueue:    IsMinQueue,
 	}
 }
@@ -103,15 +103,16 @@ func (pq *MemPQueue) Enqueue(obj string, prio float64, channel int, notBefore ti
 
 	pqItem := pqItem{obj: obj, prio: prio, not_before: notBefore}
 
+	if pq.isMinQueue {
+		pqItem.prio = -prio
+	}
+
 	if !notBefore.IsZero() && time.Now().Before(notBefore) {
 		pq.not_before_pq.Enqueue(notBeforeItem{
 			item:    pqItem,
 			channel: channel,
 		})
 	} else {
-		if pq.isMinQueue {
-			prio = -prio
-		}
 		pq.pqs[channel].Enqueue(pqItem)
 	}
 
@@ -140,7 +141,7 @@ func (pq *MemPQueue) ResetQueue() error {
 
 	pqs := make([]pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
 	for i := 0; i < MAX_CHANNEL; i++ {
-		pqs[i] = *pqueue.NewPriorityQueue[pqItem](less)
+		pqs[i] = *pqueue.NewPriorityQueue(less)
 	}
 	pq.pqs = pqs
 	pq.not_before_pq = *pqueue.NewPriorityQueue(less_not_before)

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jnsoft/jngo/pqueue"
 	"github.com/jnsoft/jnq/src/mempqueue"
-	"github.com/jnsoft/jnq/src/pqueue"
 )
 
 const (
@@ -183,6 +184,49 @@ func (s *Server) DequeueHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// SizeHandler handles requests to get the current size of the queue
+// @Summary Get the size of the queue
+// @Description Returns the number of items in the queue for a specified channel
+// @Produce json
+// @Param channel query int false "Channel to get the size of"
+// @Success 200 {object} map[string]int "Queue size"
+// @Failure 400 "Bad Request"
+// @Failure 403 "Forbidden"
+// @Failure 500 "Internal Server Error"
+// @Router /size [get]
+// @Method get
+func (s *Server) SizeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	channelStr := r.URL.Query().Get("channel")
+	channel, err := strconv.Atoi(channelStr)
+	if err != nil || channel < 0 || channel > mempqueue.MAX_CHANNEL {
+		http.Error(w, "Invalid channel. Must be between 0 and 100.", http.StatusBadRequest)
+		return
+	}
+
+	size, err := s.pq.Size(channel)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get queue size: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]int{"size": size}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	if s.verbose {
+		log.Printf("SizeHandler: channel %d has size %d\n", channel, size)
+	}
+}
+
 func (s *Server) ServeSwagger(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(swaggerJSON)
@@ -230,6 +274,7 @@ func (s *Server) Start(addr string, ready chan<- struct{}) error {
 	mux.Handle("/enqueue", s.apiKeyMiddleware(http.HandlerFunc(s.EnqueueHandler)))
 	mux.Handle("/dequeue", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueHandler)))
 	mux.Handle("/reset", s.apiKeyMiddleware(http.HandlerFunc(s.ResetHandler)))
+	mux.Handle("/size", s.apiKeyMiddleware(http.HandlerFunc(s.SizeHandler)))
 	mux.HandleFunc("/swagger.json", s.ServeSwagger)
 	mux.HandleFunc("/swagger-ui/", s.ServeSwaggerUi)
 

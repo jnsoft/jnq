@@ -21,11 +21,15 @@ go test -v -race ./src/pqueue/ # identify race conditions
 go test -v ./src/mempqueue
 
 go run src/generateswagger/generateswagger.go
-go build -o .bin/app ./src/main.go
-./.bin/app -db test.db -table QueueItems -n 10
 
-go run ./src/main.go -key api-key -n 3 -db test.db -v
-go run ./src/main.go -db test.db -table QueueItems -n 10
+go build -o .bin/app ./src/main.go
+
+go run ./src/main.go -key api-key -db test.db -v
+go run ./src/main.go -key api-key -m
+
+
+go build -o ./.bin/client ./workerclient/workerclient.go
+./.bin/client http://localhost:8080 1 api-key 5 5
 ```
 
 ### Podman build
@@ -33,8 +37,10 @@ go run ./src/main.go -db test.db -table QueueItems -n 10
 podman build -t jnq .
 
 read -s API_KEY
-
 podman run -d --rm -p 8080:8080 jnq -key $API_KEY
+
+mkdir -p ~/jnq-data
+podman run -d --rm -p 8080:8080 -v ~/jnq-data:/app/data jnq -key $API_KEY -db /app/data/test.db
 
 curl -X 'POST' \
   "http://localhost:8080/reset" \
