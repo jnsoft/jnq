@@ -27,4 +27,5 @@
             ]
         }
     ]
+     //,"postLaunchTask": "open-swagger-ui"
 }

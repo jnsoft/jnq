@@ -15,6 +15,83 @@
   },
   "openapi": "3.0.4",
   "paths": {
+    "/confirm": {
+      "post": {
+        "description": "Confirm a reservation by providing the reservation ID",
+        "method": "post",
+        "path": "/confirm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "description": "Reservation ID to confirm",
+                "format": null,
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Reservation confirmed"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "405": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Confirm a reservation"
+      }
+    },
     "/dequeue": {
       "get": {
         "description": "Dequeue an item from the priority queue",
@@ -209,6 +286,93 @@
           }
         ],
         "summary": "Enqueue an item"
+      }
+    },
+    "/reserve": {
+      "get": {
+        "description": "Dequeue an item from the priority queue with a reservation ID",
+        "method": "get",
+        "parameters": [
+          {
+            "description": "Channel to dequeue from",
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "path": "/reserve",
+        "responses": {
+          "200": {
+            "content": {
+              "map[string]string": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "{object}"
+          },
+          "204": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "403": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "405": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "summary": "Dequeue an item with reservation"
       }
     },
     "/reset": {

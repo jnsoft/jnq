@@ -185,6 +185,98 @@ func (s *Server) DequeueHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DequeueWithReservationHandler handles dequeue requests with reservation
+// @Summary Dequeue an item with reservation
+// @Description Dequeue an item from the priority queue with a reservation ID
+// @Produce  json
+// @Param  channel  query  int  false  "Channel to dequeue from"
+// @Success 200 {object} map[string]string "Dequeued item and reservation ID"
+// @Failure 204 "No Content"
+// @Failure 400 "Bad Request"
+// @Failure 403 "Forbidden"
+// @Failure 405 "Method Not Allowed"
+// @Failure 500 "Internal Server Error"
+// @Router /reserve [get]
+// @Method get
+func (s *Server) DequeueWithReservationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	channelStr := r.URL.Query().Get("channel")
+	channel, err := strconv.Atoi(channelStr)
+	if err != nil {
+		channel = DEFAULT_CHANNEL
+	}
+
+	if channel < 0 || channel > mempqueue.MAX_CHANNEL {
+		http.Error(w, "Channel must be between 0 and 100", http.StatusBadRequest)
+		return
+	}
+
+	value, reservationId, err := s.pq.DequeueWithReservation(channel)
+	if err != nil {
+		if err.Error() == pqueue.EMPTY_QUEUE {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return the dequeued item and reservation ID as a JSON object
+	response := map[string]string{
+		"value":          value,
+		"reservation_id": reservationId,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
+	if s.verbose {
+		log.Printf("DequeueWithReservationHandler: dequeued item: %s with reservation ID: %s\n", value, reservationId)
+	}
+}
+
+// ConfirmReservationHandler handles requests to confirm a reservation
+// @Summary Confirm a reservation
+// @Description Confirm a reservation by providing the reservation ID
+// @Accept  json
+// @Produce  json
+// @Param  reservation_id  body  string  true  "Reservation ID to confirm"
+// @Success 200 "Reservation confirmed"
+// @Failure 400 "Bad Request"
+// @Failure 403 "Forbidden"
+// @Failure 405 "Method Not Allowed"
+// @Failure 500 "Internal Server Error"
+// @Router /confirm [post]
+// @Method post
+func (s *Server) ConfirmReservationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		ReservationId string `json:"reservation_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := s.pq.ConfirmReservation(request.ReservationId); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if s.verbose {
+		log.Printf("ConfirmReservationHandler: confirmed reservation ID: %s\n", request.ReservationId)
+	}
+}
+
 // SizeHandler handles requests to get the current size of the queue
 // @Summary Get the size of the queue
 // @Description Returns the number of items in the queue for a specified channel
@@ -269,11 +361,25 @@ func (s *Server) ServeSwaggerUi(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) StartRequeueTask(timeout time.Duration) {
+	ticker := time.NewTicker(timeout / 2)
+	go func() {
+		for range ticker.C {
+			s.pq.RequeueExpiredReservations(timeout)
+			if s.verbose {
+				log.Println("Requeued expired reservations")
+			}
+		}
+	}()
+}
+
 func (s *Server) Start(addr string, ready chan<- struct{}) error {
 	mux := http.NewServeMux() // custom ServeMux
 
 	mux.Handle("/enqueue", s.apiKeyMiddleware(http.HandlerFunc(s.EnqueueHandler)))
 	mux.Handle("/dequeue", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueHandler)))
+	mux.Handle("/reserve", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueWithReservationHandler)))
+	mux.Handle("/confirm", s.apiKeyMiddleware(http.HandlerFunc(s.ConfirmReservationHandler)))
 	mux.Handle("/reset", s.apiKeyMiddleware(http.HandlerFunc(s.ResetHandler)))
 	mux.Handle("/size", s.apiKeyMiddleware(http.HandlerFunc(s.SizeHandler)))
 	mux.HandleFunc("/swagger.json", s.ServeSwagger)
