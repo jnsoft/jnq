@@ -169,16 +169,21 @@ func TestJnqEndToEnd(t *testing.T) {
 	})
 
 	t.Run("Performance test", func(t *testing.T) {
-		const NO_OF_ITEMS = 100
-		const MAX_PARALLELISM = 20
+		const NO_OF_ITEMS = 500
+		const MAX_PARALLELISM = 1
 		const VERBOSE = false
 
 		tempFile, err := getTempFile()
 		AssertNoError(t, err)
 		defer os.Remove(tempFile.Name())
 
-		pq := sqlpqueue.NewSqLitePQueue(tempFile.Name(), "test", VERBOSE)
-		//pq := mempqueue.NewMemPQueue(true)
+		tempFile2, err := getTempFile()
+		AssertNoError(t, err)
+		defer os.Remove(tempFile2.Name())
+
+		//pq := sqlpqueue.NewSqLitePQueue(tempFile.Name(), "test", VERBOSE)
+		pq := mempqueue.NewMemPQueue(true)
+		//pq := mempqueue.NewMemPQueuePersistent(true, tempFile.Name(), tempFile2.Name())
 
 		srv := server.NewServer(pq, API_KEY, VERBOSE)
 		ready := make(chan struct{})
@@ -276,7 +281,7 @@ func getItem(itemId int) string {
 
 func getTempFile() (*os.File, error) {
 	// Create a temporary file in the default temp directory
-	tempFile, err := os.CreateTemp("", "prefix-*.db")
+	tempFile, err := os.CreateTemp("", "deleteme-*.db")
 	if err != nil {
 		return nil, err
 	}

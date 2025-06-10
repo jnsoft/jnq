@@ -30,6 +30,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
-*.db
+
 /bin
 /.bin
+# Storage
+*.db
+*.mmap
+*.sav
+*.wal
+*.snap

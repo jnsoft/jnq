@@ -185,6 +185,19 @@ func (s *Server) DequeueHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DequeueWithReservationHandler handles dequeue requests with reservation
+// @Summary Dequeue an item with reservation
+// @Description Dequeue an item from the priority queue with a reservation ID
+// @Produce  json
+// @Param  channel  query  int  false  "Channel to dequeue from"
+// @Success 200 {object} map[string]string "Dequeued item and reservation ID"
+// @Failure 204 "No Content"
+// @Failure 400 "Bad Request"
+// @Failure 403 "Forbidden"
+// @Failure 405 "Method Not Allowed"
+// @Failure 500 "Internal Server Error"
+// @Router /reserve [get]
+// @Method get
 func (s *Server) DequeueWithReservationHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -225,6 +238,19 @@ func (s *Server) DequeueWithReservationHandler(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// ConfirmReservationHandler handles requests to confirm a reservation
+// @Summary Confirm a reservation
+// @Description Confirm a reservation by providing the reservation ID
+// @Accept  json
+// @Produce  json
+// @Param  reservation_id  body  string  true  "Reservation ID to confirm"
+// @Success 200 "Reservation confirmed"
+// @Failure 400 "Bad Request"
+// @Failure 403 "Forbidden"
+// @Failure 405 "Method Not Allowed"
+// @Failure 500 "Internal Server Error"
+// @Router /confirm [post]
+// @Method post
 func (s *Server) ConfirmReservationHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -352,7 +378,7 @@ func (s *Server) Start(addr string, ready chan<- struct{}) error {
 
 	mux.Handle("/enqueue", s.apiKeyMiddleware(http.HandlerFunc(s.EnqueueHandler)))
 	mux.Handle("/dequeue", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueHandler)))
-	mux.Handle("/dequeuesafe", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueWithReservationHandler)))
+	mux.Handle("/reserve", s.apiKeyMiddleware(http.HandlerFunc(s.DequeueWithReservationHandler)))
 	mux.Handle("/confirm", s.apiKeyMiddleware(http.HandlerFunc(s.ConfirmReservationHandler)))
 	mux.Handle("/reset", s.apiKeyMiddleware(http.HandlerFunc(s.ResetHandler)))
 	mux.Handle("/size", s.apiKeyMiddleware(http.HandlerFunc(s.SizeHandler)))

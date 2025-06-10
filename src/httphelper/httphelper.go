@@ -6,7 +6,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
+
+var sharedClient = &http.Client{}
+
+var sharedClient2 = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
 
 func GetJSON[T any](url string, headers ...[2]string) (T, int, error) {
 	var result T
@@ -60,10 +71,11 @@ func GetBytes(url string, headers ...[2]string) ([]byte, int, error) {
 }
 
 func get(url string, headers ...[2]string) (*http.Response, int, error) {
-	var transport *http.Transport
-	transport = &http.Transport{
-		Proxy: nil,
-	}
+
+	//sharedClient.Transport = &http.Transport{
+	//	Proxy: nil,
+	//	// ...other transport settings...
+	//}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -75,11 +87,7 @@ func get(url string, headers ...[2]string) (*http.Response, int, error) {
 		req.Header.Set(header[0], header[1])
 	}
 
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	resp, err := client.Do(req)
+	resp, err := sharedClient.Do(req)
 
 	if err != nil {
 		return nil, 0, err
@@ -127,8 +135,7 @@ func post(url string, data []byte, headers ...[2]string) (*http.Response, int, e
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := sharedClient.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to send request: %w", err)
 	}

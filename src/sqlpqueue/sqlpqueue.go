@@ -22,7 +22,7 @@ const (
             Obj TEXT NOT NULL,
 			Channel INTEGER NOT NULL,
             NotBefore INTEGER NOT NULL,
-			Reserved INTEGER NOT NULL
+			Reserved INTEGER NOT NULL,
 			ReservedId TEXT NULL
         );`
 	selectSQL = "SELECT * FROM %s WHERE Reserved = 0 and Channel = ? and NotBefore <= ? ORDER BY Prio %s LIMIT 1"
@@ -91,8 +91,12 @@ func (pq *SqLitePQueue) Dequeue(channel int) (string, error) {
 	row := tx.QueryRow(selectSQL, channel, time.Now().Unix())
 
 	var id int
+	var prio float64
 	var obj string
-	err = row.Scan(&id, &obj)
+	var notBefore int64
+	var reserved int
+	var reservedId sql.NullString
+	err = row.Scan(&id, &prio, &obj, &channel, &notBefore, &reserved, &reservedId)
 	if err == sql.ErrNoRows {
 		return "", errors.New(pqueue.EMPTY_QUEUE)
 	} else if err != nil {
@@ -274,7 +278,9 @@ func (pq *SqLitePQueue) peek(channel int) (bool, int, string, error) {
 	var obj string
 	var ch int
 	var notBefore int64
-	err = row.Scan(&id, &prio, &obj, &ch, &notBefore)
+	var reserved int
+	var reservedId sql.NullString
+	err = row.Scan(&id, &prio, &obj, &ch, &notBefore, &reserved, &reservedId)
 	if err == sql.ErrNoRows {
 		return false, 0, "", nil
 	}

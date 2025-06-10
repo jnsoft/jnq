@@ -4,3 +4,5 @@ github.com/jnsoft/jngo v0.0.0-20250607101013-26a9fd520473 h1:90tWcx5tK5oti6WVQPi
 github.com/jnsoft/jngo v0.0.0-20250607101013-26a9fd520473/go.mod h1:INv+MVRFmZ27z7kzO9/HnW0/KsMPiK3aGr9D0uUfwZM=
 github.com/mattn/go-sqlite3 v1.14.24 h1:tpSp2G2KyMnnQu99ngJ47EIkWVmliIizyZBfPrBWDRM=
 github.com/mattn/go-sqlite3 v1.14.24/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
+golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476 h1:bsqhLWFR6G6xiQcb+JoGqdKdRU6WzPWmK8E0jxTjzo4=
+golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476/go.mod h1:3//PLf8L/X+8b4vuAfHzxeRUl04Adcb341+IGKfnqS8=
