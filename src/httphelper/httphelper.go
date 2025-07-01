@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -141,4 +142,12 @@ func post(url string, data []byte, headers ...[2]string) (*http.Response, int, e
 	}
 
 	return resp, resp.StatusCode, nil
+}
+
+func SplitPath(path string) []string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return []string{}
+	}
+	return strings.Split(path, "/")
 }

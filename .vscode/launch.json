@@ -20,9 +20,10 @@
             "cwd": "${workspaceFolder}",
             //"program": "main.go",
             "args": [
-                "-db", "test.db",
+                //"-db", "test.db",
                 "-key", "api-key",
                 //"-m",
+                "-m", "-f", "jnqstore",
                 "-v"
             ]
         }
