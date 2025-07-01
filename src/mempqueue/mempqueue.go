@@ -48,8 +48,8 @@ type walOp struct { // Write-Ahead Log
 }
 
 type MemPQueue struct {
-	pqs           []pqueue.PriorityQueue[pqItem]
-	not_before_pq pqueue.PriorityQueue[notBeforeItem]
+	pqs           []*pqueue.PriorityQueue[pqItem]
+	not_before_pq *pqueue.PriorityQueue[notBeforeItem]
 	reserved      map[string]reservedItem
 	isMinQueue    bool
 	mu            sync.Mutex
@@ -67,13 +67,13 @@ func less_not_before(i, j notBeforeItem) bool {
 }
 
 func NewMemPQueue(IsMinQueue bool) *MemPQueue {
-	pqs := make([]pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
+	pqs := make([]*pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
 	for i := 0; i < MAX_CHANNEL; i++ {
-		pqs[i] = *pqueue.NewPriorityQueue(less)
+		pqs[i] = pqueue.NewPriorityQueue(less)
 	}
 	return &MemPQueue{
 		pqs:           pqs,
-		not_before_pq: *pqueue.NewPriorityQueue(less_not_before),
+		not_before_pq: pqueue.NewPriorityQueue(less_not_before),
 		reserved:      make(map[string]reservedItem),
 		isMinQueue:    IsMinQueue,
 	}
@@ -263,13 +263,13 @@ func (pq *MemPQueue) ResetQueue() error {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
-	pqs := make([]pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
+	pqs := make([]*pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
 	for i := 0; i < MAX_CHANNEL; i++ {
-		pqs[i] = *pqueue.NewPriorityQueue(less)
+		pqs[i] = pqueue.NewPriorityQueue(less)
 	}
 
 	pq.pqs = pqs
-	pq.not_before_pq = *pqueue.NewPriorityQueue(less_not_before)
+	pq.not_before_pq = pqueue.NewPriorityQueue(less_not_before)
 	pq.reserved = make(map[string]reservedItem)
 
 	if pq.snapshotFile != "" {
@@ -436,13 +436,13 @@ func (pq *MemPQueue) load() error {
 				}
 
 				// Rebuild pqs
-				pqs := make([]pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
+				pqs := make([]*pqueue.PriorityQueue[pqItem], MAX_CHANNEL)
 				for i := 0; i < MAX_CHANNEL; i++ {
 					q := pqueue.NewPriorityQueue(less)
 					for _, item := range pqItems[i] {
 						q.Enqueue(item)
 					}
-					pqs[i] = *q
+					pqs[i] = q
 				}
 				pq.pqs = pqs
 
@@ -451,7 +451,7 @@ func (pq *MemPQueue) load() error {
 				for _, item := range notBeforeItems {
 					nbq.Enqueue(item)
 				}
-				pq.not_before_pq = *nbq
+				pq.not_before_pq = nbq
 
 				// Restore reserved
 				pq.reserved = make(map[string]reservedItem)
