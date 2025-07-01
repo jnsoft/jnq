@@ -229,22 +229,34 @@ func (pq *MemPQueue) ConfirmReservation(reservationId string) (bool, error) {
 	return true, nil
 }
 
-func (pq *MemPQueue) RequeueExpiredReservations(timeout time.Duration) {
+func (pq *MemPQueue) RequeueExpiredReservations(timeout time.Duration) (int, error) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
+	c := 0
 	now := time.Now()
 	for reservationId, reserved := range pq.reserved {
 		if now.Sub(reserved.Timestamp) > timeout {
+			c++
 			pq.pqs[reserved.Channel].Enqueue(reserved.Item)
 			delete(pq.reserved, reservationId)
 			if pq.snapshotFile != "" {
-				pq.appendWAL(walOp{Op: "delete_reserved", Channel: reserved.Channel, Item: reserved.Item, Time: time.Now()})
-				pq.appendWAL(walOp{Op: "enqueue", Channel: reserved.Channel, Item: reserved.Item, Time: time.Now()})
-				pq.maybeCheckpoint()
+				err := pq.appendWAL(walOp{Op: "delete_reserved", Channel: reserved.Channel, Item: reserved.Item, Time: time.Now()})
+				if err != nil {
+					return c, err
+				}
+				err = pq.appendWAL(walOp{Op: "enqueue", Channel: reserved.Channel, Item: reserved.Item, Time: time.Now()})
+				if err != nil {
+					return c, err
+				}
+				err = pq.maybeCheckpoint()
+				if err != nil {
+					return c, err
+				}
 			}
 		}
 	}
+	return c, nil
 }
 
 func (pq *MemPQueue) ResetQueue() error {
@@ -301,18 +313,24 @@ func (pq *MemPQueue) processNotBeforeQueue() {
 
 // persistant storage functions
 
-func (pq *MemPQueue) appendWAL(op walOp) {
+func (pq *MemPQueue) appendWAL(op walOp) error {
 	if pq.walFile == "" {
-		return
+		return nil
 	}
+
 	f, err := os.OpenFile(pq.walFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		return
+		return err
 	}
 	defer f.Close()
+
 	enc := json.NewEncoder(f)
-	_ = enc.Encode(op)
+	err = enc.Encode(op)
+	if err != nil {
+		return err
+	}
 	pq.opCount++
+	return nil
 }
 
 func (pq *MemPQueue) maybeCheckpoint() error {
@@ -481,8 +499,13 @@ func (pq *MemPQueue) load() error {
 						// Remove reservation
 						delete(pq.reserved, op.ResId)
 					case "delete_reserved":
-						// Remove reservation (if exists)
-						delete(pq.reserved, op.ResId)
+						// Remove reservation by value (reserved item)
+						for id, reserved := range pq.reserved {
+							if reserved.Item == op.Item && reserved.Channel == op.Channel {
+								delete(pq.reserved, id)
+								break
+							}
+						}
 					}
 				}
 			}

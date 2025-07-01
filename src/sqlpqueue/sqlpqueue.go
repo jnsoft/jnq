@@ -195,18 +195,24 @@ func (pq *SqLitePQueue) ConfirmReservation(reservationId string) (bool, error) {
 	return rowsAffected > 0, nil
 }
 
-func (pq *SqLitePQueue) RequeueExpiredReservations(timeout time.Duration) {
+func (pq *SqLitePQueue) RequeueExpiredReservations(timeout time.Duration) (int, error) {
 	db, err := sql.Open("sqlite3", pq.connectionString)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	defer db.Close()
+
 	requeueTime := time.Now().Add(-timeout).Unix()
 	requeueSQL := fmt.Sprintf("UPDATE %s SET Reserved = 0, ReservedId = NULL WHERE Reserved = 1 AND NotBefore <= ?", pq.table)
-	_, err = db.Exec(requeueSQL, requeueTime)
+	res, err := db.Exec(requeueSQL, requeueTime)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(rowsAffected), nil
 }
 
 func (pq *SqLitePQueue) Size(channel int) (int, error) {

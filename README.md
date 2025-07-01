@@ -4,6 +4,7 @@ TODO:
 tests for DequeueWithReservation, ConfirmReservation and RequeueExpiredReservations  
 tests for /dequeuesafe and /confirm and StartRequeueTask in Server
 update swagger for /dequeuesafe and /confirm
+requeue cannot run before file is fully loaded
 
 
 # Init

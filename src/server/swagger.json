@@ -15,23 +15,22 @@
   },
   "openapi": "3.0.4",
   "paths": {
-    "/confirm": {
+    "/confirm/{reservation_id}": {
       "post": {
-        "description": "Confirm a reservation by providing the reservation ID",
+        "description": "Confirm a reservation by providing the reservation Id as a path parameter",
         "method": "post",
-        "path": "/confirm",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "description": "Reservation ID to confirm",
-                "format": null,
-                "type": "string"
-              }
+        "parameters": [
+          {
+            "description": "Reservation Id to confirm",
+            "in": "path",
+            "name": "reservation_id",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
-          },
-          "required": true
-        },
+          }
+        ],
+        "path": "/confirm/{reservation_id}",
         "responses": {
           "200": {
             "content": {
