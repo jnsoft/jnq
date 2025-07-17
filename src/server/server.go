@@ -119,7 +119,11 @@ func (s *Server) EnqueueHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.pq.Enqueue(item, priority, channel, notBefore)
+	err = s.pq.Enqueue(item, priority, channel, notBefore)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	var resStr string
 	if s.verbose {

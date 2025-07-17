@@ -201,7 +201,7 @@ func TestMemPQueueSnapshot(t *testing.T) {
 	AssertNoError(t, err)
 	defer os.Remove(snapshotFile.Name())
 
-	walFile, err := os.CreateTemp("", "deleteme-*.sav")
+	walFile, err := os.CreateTemp("", "deleteme-*.wal")
 	AssertNoError(t, err)
 	defer os.Remove(walFile.Name())
 
@@ -210,11 +210,11 @@ func TestMemPQueueSnapshot(t *testing.T) {
 
 	snap = "snap.sav"
 	wal = "wal.sav"
-	defer os.Remove("snap.sav")
-	defer os.Remove("wal.sav")
+	defer os.Remove(snap)
+	defer os.Remove(wal)
 
 	channel := 7
-	no_of_messages := CHECKPOINT_COUNT*10 + 10
+	no_of_messages := CHECKPOINT_COUNT*1 + 1
 
 	q := NewMemPQueuePersistent(true, snap, wal)
 	AssertTrue(t, q != nil)
@@ -222,13 +222,20 @@ func TestMemPQueueSnapshot(t *testing.T) {
 		q.Enqueue("persist"+strconv.Itoa(i), float64(i), channel, time.Time{})
 	}
 
+	dequed := no_of_messages / 10
+	for i := 0; i < dequed; i++ {
+		val, err := q.Dequeue(channel)
+		AssertNil(t, err)
+		AssertEqual(t, val, "persist"+strconv.Itoa(i))
+	}
+
 	size, err := q.Size(channel)
 	AssertNil(t, err)
-	AssertEqual(t, size, no_of_messages)
+	AssertEqual(t, size, no_of_messages-dequed)
 
 	q = NewMemPQueuePersistent(true, snap, wal)
 	size, err = q.Size(channel)
 	AssertNil(t, err)
-	AssertEqual(t, size, no_of_messages)
+	AssertEqual(t, size, no_of_messages-dequed)
 
 }

@@ -3,7 +3,6 @@
 TODO:  
 tests for DequeueWithReservation, ConfirmReservation and RequeueExpiredReservations  
 tests for /dequeuesafe and /confirm and StartRequeueTask in Server
-update swagger for /dequeuesafe and /confirm
 requeue cannot run before file is fully loaded
 
 
@@ -51,6 +50,7 @@ podman run -d --rm -p 8080:8080 jnq -key $API_KEY
 
 mkdir -p ~/jnq-data
 podman run -d --rm -p 8080:8080 -v ~/jnq-data:/app/data jnq -key $API_KEY -db /app/data/test.db
+
 podman run -d --rm -p 8080:8080 -v ~/jnq-data:/app/data jnq -key $API_KEY -m -f /app/data/test
 
 curl -X 'POST' \
@@ -65,6 +65,8 @@ curl -X 'POST' \
   -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '"this is a message"'
+
+curl -X 'POST' "http://localhost:8080/enqueue?prio=1.5&channel=2&notbefore=2025-04-10T19:37:53Z" -H "accept: text/plain" -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" -d '"this is a message"'
 
 curl -X 'POST' \
   "http://localhost:8080/enqueue?channel=2" \

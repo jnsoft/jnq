@@ -51,7 +51,22 @@ func main() {
 			log.Println("Using in-memory queue without persistence")
 			pq = mempqueue.NewMemPQueue(true)
 		} else {
-			log.Printf("Using %s.wal/sav for persistent in-memory queue\n", *persistantFile)
+			walPath := *persistantFile + ".wal"
+			savPath := *persistantFile + ".sav"
+			log.Printf("Using %s and %s for persistent in-memory queue\n", walPath, savPath)
+
+			wal, err := os.OpenFile(walPath, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				log.Fatalf("Cannot access or create WAL file %s: %v", walPath, err)
+			}
+			wal.Close()
+
+			sav, err := os.OpenFile(savPath, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				log.Fatalf("Cannot access or create SAV file %s: %v", savPath, err)
+			}
+			sav.Close()
+
 			pq = mempqueue.NewMemPQueuePersistent(true, *persistantFile+".sav", *persistantFile+".wal")
 		}
 	} else {
