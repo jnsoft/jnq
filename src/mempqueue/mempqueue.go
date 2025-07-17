@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -18,7 +19,9 @@ import (
 const (
 	MAX_CHANNEL         = 100
 	INVALID_CHANNEL_MSG = "invalid channel"
-	CHECKPOINT_COUNT    = 1000
+	CHECKPOINT_COUNT    = 10_000
+	DELETEME_SUFFIX     = ".deleteme"
+	TRY_RESET_INTERVAL  = 10 * time.Minute
 )
 
 type pqItem struct {
@@ -48,14 +51,15 @@ type walOp struct { // Write-Ahead Log
 }
 
 type MemPQueue struct {
-	pqs           []pqueue.PriorityQueue[pqItem]
-	not_before_pq pqueue.PriorityQueue[notBeforeItem]
-	reserved      map[string]reservedItem
-	isMinQueue    bool
-	mu            sync.Mutex
-	snapshotFile  string
-	walFile       string
-	opCount       int
+	pqs            []pqueue.PriorityQueue[pqItem]
+	not_before_pq  pqueue.PriorityQueue[notBeforeItem]
+	reserved       map[string]reservedItem
+	isMinQueue     bool
+	mu             sync.Mutex
+	snapshotFile   string
+	walFile        string
+	opCount        int
+	lastResetCheck time.Time
 }
 
 func less(i, j pqItem) bool {
@@ -84,19 +88,22 @@ func NewMemPQueuePersistent(IsMinQueue bool, snapshotFile, walFile string) *MemP
 	pq.snapshotFile = snapshotFile
 	pq.walFile = walFile
 	pq.opCount = 0
+	pq.lastResetCheck = time.Now()
 	if err := pq.load(); err != nil {
 		panic("failed to load persistent queue: " + err.Error())
 	}
 	return pq
 }
 
+// Operations
+
 func (pq *MemPQueue) IsEmpty(channel int) (bool, error) {
 	if channel < 0 || channel >= MAX_CHANNEL {
 		return true, nil
 	}
+	pq.processNotBeforeQueue()
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	pq.processNotBeforeQueue()
 	return pq.pqs[channel].IsEmpty(), nil
 }
 
@@ -104,9 +111,9 @@ func (pq *MemPQueue) Size(channel int) (int, error) {
 	if channel < 0 || channel >= MAX_CHANNEL {
 		return 0, nil
 	}
+	pq.processNotBeforeQueue()
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	pq.processNotBeforeQueue()
 	return pq.pqs[channel].Size(), nil
 }
 
@@ -114,9 +121,9 @@ func (pq *MemPQueue) Peek(channel int) (string, error) {
 	if channel < 0 || channel >= MAX_CHANNEL {
 		return "", errors.New(INVALID_CHANNEL_MSG)
 	}
+	pq.processNotBeforeQueue()
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-	pq.processNotBeforeQueue()
 	item, err := pq.pqs[channel].Peek()
 	if err != nil {
 		return "", err
@@ -138,22 +145,36 @@ func (pq *MemPQueue) Enqueue(obj string, prio float64, channel int, notBefore ti
 	}
 
 	if !notBefore.IsZero() && time.Now().Before(notBefore) {
+		if pq.snapshotFile != "" {
+			err := pq.appendWAL(walOp{Op: "enqueue_notbefore", Channel: channel, Item: pqItem, Time: time.Now()})
+			if err != nil {
+				log.Printf("Error appending to WAL: %v", err)
+				return err
+			} else {
+
+			}
+		}
+
 		pq.not_before_pq.Enqueue(notBeforeItem{
 			Item:    pqItem,
 			Channel: channel,
 		})
 
-		if pq.snapshotFile != "" {
-			pq.appendWAL(walOp{Op: "enqueue_notbefore", Channel: channel, Item: pqItem, Time: time.Now()})
-			pq.maybeCheckpoint()
-		}
+		pq.maybeCheckpoint()
+
 	} else {
-		pq.pqs[channel].Enqueue(pqItem)
 
 		if pq.snapshotFile != "" {
-			pq.appendWAL(walOp{Op: "enqueue", Channel: channel, Item: pqItem, Time: time.Now()})
-			pq.maybeCheckpoint()
+			err := pq.appendWAL(walOp{Op: "enqueue", Channel: channel, Item: pqItem, Time: time.Now()})
+			if err != nil {
+				log.Printf("Error appending to WAL: %v", err)
+				return err
+			}
 		}
+
+		pq.pqs[channel].Enqueue(pqItem)
+
+		pq.maybeCheckpoint()
 	}
 
 	return nil
@@ -163,10 +184,11 @@ func (pq *MemPQueue) Dequeue(channel int) (string, error) {
 	if channel < 0 || channel >= MAX_CHANNEL {
 		return "", errors.New(INVALID_CHANNEL_MSG)
 	}
-	pq.mu.Lock()
-	defer pq.mu.Unlock()
 
 	pq.processNotBeforeQueue()
+
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
 
 	item, err := pq.pqs[channel].Dequeue()
 	if err != nil {
@@ -174,7 +196,13 @@ func (pq *MemPQueue) Dequeue(channel int) (string, error) {
 	}
 
 	if pq.snapshotFile != "" {
-		pq.appendWAL(walOp{Op: "dequeue", Channel: channel, Item: item, Time: time.Now()})
+		err := pq.appendWAL(walOp{Op: "dequeue", Channel: channel, Item: item, Time: time.Now()})
+		if err != nil {
+			log.Printf("Error appending to WAL: %v", err)
+			pq.pqs[channel].Enqueue(item)
+			return "", err
+
+		}
 		pq.maybeCheckpoint()
 	}
 
@@ -188,10 +216,10 @@ func (pq *MemPQueue) DequeueWithReservation(channel int) (string, string, error)
 	if channel < 0 || channel >= MAX_CHANNEL {
 		return "", "", errors.New(INVALID_CHANNEL_MSG)
 	}
+	pq.processNotBeforeQueue()
+
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
-
-	pq.processNotBeforeQueue()
 
 	item, err := pq.pqs[channel].Dequeue()
 	if err != nil {
@@ -206,7 +234,13 @@ func (pq *MemPQueue) DequeueWithReservation(channel int) (string, string, error)
 	}
 
 	if pq.snapshotFile != "" {
-		pq.appendWAL(walOp{Op: "dequeueWithReservation", Channel: channel, Item: item, ResId: reservationId, Time: time.Now()})
+		err := pq.appendWAL(walOp{Op: "dequeueWithReservation", Channel: channel, Item: item, ResId: reservationId, Time: time.Now()})
+		if err != nil {
+			log.Printf("Error appending to WAL: %v", err)
+			pq.pqs[channel].Enqueue(item)
+			delete(pq.reserved, reservationId)
+			return "", "", err
+		}
 		pq.maybeCheckpoint()
 	}
 	return item.Obj, reservationId, nil
@@ -221,11 +255,16 @@ func (pq *MemPQueue) ConfirmReservation(reservationId string) (bool, error) {
 		return false, errors.New("invalid or expired reservation ID")
 	}
 
-	delete(pq.reserved, reservationId)
 	if pq.snapshotFile != "" {
-		pq.appendWAL(walOp{Op: "confirm", ResId: reservationId, Time: time.Now()})
-		pq.maybeCheckpoint()
+		err := pq.appendWAL(walOp{Op: "confirm", ResId: reservationId, Time: time.Now()})
+		if err != nil {
+			log.Printf("Error appending to WAL: %v", err)
+			return false, err
+		}
 	}
+
+	delete(pq.reserved, reservationId)
+	pq.maybeCheckpoint()
 	return true, nil
 }
 
@@ -237,9 +276,6 @@ func (pq *MemPQueue) RequeueExpiredReservations(timeout time.Duration) (int, err
 	now := time.Now()
 	for reservationId, reserved := range pq.reserved {
 		if now.Sub(reserved.Timestamp) > timeout {
-			c++
-			pq.pqs[reserved.Channel].Enqueue(reserved.Item)
-			delete(pq.reserved, reservationId)
 			if pq.snapshotFile != "" {
 				err := pq.appendWAL(walOp{Op: "delete_reserved", Channel: reserved.Channel, Item: reserved.Item, Time: time.Now()})
 				if err != nil {
@@ -249,11 +285,12 @@ func (pq *MemPQueue) RequeueExpiredReservations(timeout time.Duration) (int, err
 				if err != nil {
 					return c, err
 				}
-				err = pq.maybeCheckpoint()
-				if err != nil {
-					return c, err
-				}
 			}
+
+			pq.pqs[reserved.Channel].Enqueue(reserved.Item)
+			delete(pq.reserved, reservationId)
+			c++
+			pq.maybeCheckpoint()
 		}
 	}
 	return c, nil
@@ -284,30 +321,38 @@ func (pq *MemPQueue) ResetQueue() error {
 	return nil
 }
 
-// TODO: handle mutex properly
 func (pq *MemPQueue) processNotBeforeQueue() {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
 	for {
 		if pq.not_before_pq.IsEmpty() {
-			break
+			return
 		}
 		notBeforeItem, err := pq.not_before_pq.Peek()
 		if err != nil {
-			panic(err)
+			log.Printf("Error peeking not_before_pq in processNotBefore: %v", err)
+			return
 		}
 		if time.Now().Before(notBeforeItem.Item.Not_before) {
-			break
+			return
+
 		}
 		notBeforeItem, err = pq.not_before_pq.Dequeue()
 		if err != nil {
-			panic(err)
+			log.Printf("Error dequeueing not_before_pq in processNotBefore: %v", err)
+			return
 		}
-
-		pq.pqs[notBeforeItem.Channel].Enqueue(notBeforeItem.Item)
 
 		if pq.snapshotFile != "" {
-			pq.appendWAL(walOp{Op: "enqueue", Channel: notBeforeItem.Channel, Item: notBeforeItem.Item, Time: time.Now()})
-			pq.maybeCheckpoint()
+			err := pq.appendWAL(walOp{Op: "enqueue", Channel: notBeforeItem.Channel, Item: notBeforeItem.Item, Time: time.Now()})
+			if err != nil {
+				log.Printf("Error appending to WAL: %v", err)
+				pq.not_before_pq.Enqueue(notBeforeItem)
+				return
+			}
 		}
+		pq.pqs[notBeforeItem.Channel].Enqueue(notBeforeItem.Item)
+		pq.maybeCheckpoint()
 	}
 }
 
@@ -334,15 +379,101 @@ func (pq *MemPQueue) appendWAL(op walOp) error {
 }
 
 func (pq *MemPQueue) maybeCheckpoint() error {
-	if pq.opCount >= CHECKPOINT_COUNT {
-		if err := pq.save(); err != nil {
-			return err
+	if pq.snapshotFile != "" {
+		if pq.opCount >= CHECKPOINT_COUNT {
+			if err := pq.save(); err != nil {
+				log.Printf("Error checking checkpoint: %v", err)
+				return err
+			}
+			if err := os.Remove(pq.walFile); err != nil && !os.IsNotExist(err) {
+				log.Panic("Error checking checkpoint:", err)
+			}
+			pq.opCount = 0
+		}
+
+		now := time.Now()
+		if now.Sub(pq.lastResetCheck) >= TRY_RESET_INTERVAL {
+			_, err := pq.resetIfNoData()
+			pq.lastResetCheck = now
+			if err != nil {
+				log.Printf("Error running resetIfNoData: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (pq *MemPQueue) resetIfNoData() (bool, error) {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	for i := range pq.pqs {
+		if !pq.pqs[i].IsEmpty() {
+			return false, nil
+		}
+	}
+
+	if !pq.not_before_pq.IsEmpty() {
+		return false, nil
+	}
+
+	if len(pq.reserved) > 0 {
+		return false, nil
+	}
+
+	if pq.snapshotFile != "" && pq.walFile != "" {
+		if err := os.Remove(pq.snapshotFile); err != nil && !os.IsNotExist(err) {
+			return false, err
 		}
 		if err := os.Remove(pq.walFile); err != nil && !os.IsNotExist(err) {
+			return false, err
+		}
+	}
+	err := deleteSafely(pq.walFile, pq.snapshotFile)
+	if err != nil {
+		log.Printf("Error deleting files safely: %v", err)
+		return false, err
+	}
+	return true, nil
+}
+
+func deleteSafely(walfile, snapfile string) error {
+	if walfile != "" && snapfile != "" {
+		snapTmp := snapfile + DELETEME_SUFFIX
+		walTmp := walfile + DELETEME_SUFFIX
+
+		snapRenamed := false
+		walRenamed := false
+
+		if err := os.Rename(snapfile, snapTmp); err == nil || os.IsNotExist(err) {
+			snapRenamed = true
+		} else {
 			return err
 		}
-		pq.opCount = 0
+
+		if err := os.Rename(walfile, walTmp); err == nil || os.IsNotExist(err) {
+			walRenamed = true
+		} else {
+			if snapRenamed {
+				err = os.Rename(snapTmp, snapfile)
+				if err != nil {
+					log.Panic("Failed to rename snapshot file back: ", err)
+				}
+				snapRenamed = false
+			}
+			return err
+		}
+
+		if snapRenamed && walRenamed {
+			if err := os.Remove(snapTmp); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.Remove(walTmp); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
 	}
+
 	return nil
 }
 
