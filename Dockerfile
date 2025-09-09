@@ -1,4 +1,3 @@
-# FROM crrbtest001.azurecr.io/base/golang-latest-devc as builder
 FROM golang:latest as builder
 WORKDIR /app
 
@@ -23,7 +22,6 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o jnq ./src/main.go
 # RUN apk add --no-check-certificate ca-certificates openssl
 # RUN openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=SE/CN=www.example.com"
 
-# FROM crrbtest001.azurecr.io/base/alpine/alpine-3:3
 from debian:bookworm-slim
 
 COPY --from=builder /app/jnq .
